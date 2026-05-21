@@ -1,52 +1,75 @@
 import React, { useEffect, useRef } from 'react';
-// Добавили импорт CandlestickSeries для новой версии библиотеки
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
+// 1. ИЗМЕНЕНИЕ: Добавляем импорт CandlestickSeries
+import { createChart, CandlestickSeries } from 'lightweight-charts';
 
 const BondChart = ({ data, secid }) => {
-  const chartContainerRef = useRef();
+  const chartContainerRef = useRef(null);
+  const chartRef = useRef(null);
 
   useEffect(() => {
-    if (!data || data.length === 0 || !chartContainerRef.current) return;
+    if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
+        background: { type: 'solid', color: 'transparent' },
         textColor: '#d1d4dc',
       },
       grid: {
-        vertLines: { color: '#2a2e39' },
-        horzLines: { color: '#2a2e39' },
+        vertLines: { color: 'rgba(42, 46, 57, 0.2)' },
+        horzLines: { color: 'rgba(42, 46, 57, 0.2)' },
       },
-      width: chartContainerRef.current.clientWidth,
-      height: 400,
-      timeScale: {
-        timeVisible: true,
-        borderColor: '#2a2e39',
-      },
+      autoSize: false, 
     });
 
-    // НОВЫЙ СИНТАКСИС ДЛЯ ВЕРСИИ 5.0+
+    chartRef.current = chart;
+
+    // 2. ИЗМЕНЕНИЕ: Используем новый API (версия 5+) для создания серии
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#089981',
-      downColor: '#f23645',
+      upColor: '#26a69a',
+      downColor: '#ef5350',
       borderVisible: false,
-      wickUpColor: '#089981',
-      wickDownColor: '#f23645',
+      wickUpColor: '#26a69a',
+      wickDownColor: '#ef5350',
     });
 
-    candlestickSeries.setData(data);
+    if (data && data.length > 0) {
+      candlestickSeries.setData(data);
+      chart.timeScale().fitContent(); 
+    }
 
-    chart.timeScale().fitContent();
+    // ResizeObserver для идеального встраивания во Flexbox
+    const handleResize = () => {
+      if (chartContainerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    };
+
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(chartContainerRef.current);
+
+    handleResize();
 
     return () => {
+      resizeObserver.disconnect();
       chart.remove();
     };
-  }, [data]);
+  }, [data, secid]);
 
   return (
-    <div style={{ backgroundColor: 'var(--bg-card)', padding: '20px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-      <h5 style={{ color: 'var(--accent-green)', marginBottom: '20px' }}>График цены: {secid}</h5>
-      <div ref={chartContainerRef} style={{ width: '100%', height: '400px' }} />
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div 
+        ref={chartContainerRef} 
+        style={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0 
+        }} 
+      />
     </div>
   );
 };

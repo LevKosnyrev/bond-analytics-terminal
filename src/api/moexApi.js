@@ -1,83 +1,80 @@
-/**
- * СЕРВИС ДЛЯ РАБОТЫ С API МОСКОВСКОЙ БИРЖИ (MOEX ISS)
- * Загружает полные данные по всем доступным инструментам
- */
-
-const MOEX_BASE_URL = '/iss';
-
-/**
- * Универсальный парсер: склеивает массивы columns и data в понятные JS-объекты.
- * Автоматически сохраняет ВСЕ столбцы, пришедшие от биржи.
- */
-function transformMoexData(moexSection) {
-  if (!moexSection || !moexSection.columns || !moexSection.data) return [];
-  const columns = moexSection.columns;
-  return moexSection.data.map(row => {
-    const obj = {};
-    columns.forEach((colName, index) => {
-      obj[colName] = row[index];
-    });
-    return obj;
-  });
-}
+const MOEX_BASE_URL = 'https://iss.moex.com/iss';
 
 export const moexApi = {
-  /**
-   * Загрузка ВСЕХ облигаций со ВСЕМИ существующими столбцами
-   */
+  // 1. Сбор данных по облигациям (Государственные + Корпоративные)
   getBonds: async () => {
     try {
-      // Запрашиваем данные в формате .json (вместо .xml), чтобы не усложнять парсинг
-      const response = await fetch(
-        `${MOEX_BASE_URL}/engines/stock/markets/bonds/boards/TQCB/securities.json`
-      );
-
-      if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
-      const rawData = await response.json();
-
-      // Трансформируем обе таблицы: паспортную (securities) и рыночную (marketdata)
-      const formattedSecurities = transformMoexData(rawData.securities);
-      const formattedMarketData = transformMoexData(rawData.marketdata);
-
-      // Склеиваем их по SECID, сохраняя вообще все столбцы
-      const combinedBonds = formattedSecurities.map(sec => {
-        const market = formattedMarketData.find(m => m.SECID === sec.SECID) || {};
+      // Вспомогательная функция, чтобы не дублировать код для каждой доски
+      const fetchBoard = async (board, sectorName) => {
+        // Запрашиваем статические данные (securities) и рыночные цены (marketdata)
+        const response = await fetch(`${MOEX_BASE_URL}/engines/stock/markets/bonds/boards/${board}/securities.json?iss.meta=off&iss.only=securities,marketdata`);
+        const json = await response.json();
         
-        return {
-          ...sec,    // Разворачиваем ВСЕ столбцы из паспорта (SHORTNAME, MATDATE, LISTLEVEL и т.д.)
-          ...market  // Добавляем ВСЕ столбцы из торгов (LAST, YIELD, VOLUME, BID, OFFER и т.д.)
-        };
-      });
+        const secData = json.securities.data;
+        const secCols = json.securities.columns;
+        const mdData = json.marketdata.data;
+        const mdCols = json.marketdata.columns;
 
-      return combinedBonds;
+        // Собираем массив объектов, динамически находя индексы колонок
+        return secData.map((row, index) => {
+          const mdRow = mdData[index] || [];
+          return {
+            SECID: row[secCols.indexOf('SECID')],
+            SHORTNAME: row[secCols.indexOf('SHORTNAME')],
+            ISIN: row[secCols.indexOf('ISIN')],
+            MATDATE: row[secCols.indexOf('MATDATE')],
+            NEXTCOUPON: row[secCols.indexOf('NEXTCOUPON')],
+            COUPONVALUE: row[secCols.indexOf('COUPONVALUE')],
+            LISTLEVEL: row[secCols.indexOf('LISTLEVEL')],
+            SECTOR: sectorName, // Присваиваем сектор ('Государственные' или 'Корпоративные')
+            
+            // Рыночные данные из второго блока ответа
+            LAST: mdRow[mdCols.indexOf('LAST')],
+            PREVWAPRICE: mdRow[mdCols.indexOf('PREVWAPRICE')],
+            YIELD: mdRow[mdCols.indexOf('YIELD')],
+            VALTODAY: mdRow[mdCols.indexOf('VALTODAY')]
+          };
+        });
+      };
+
+      // Выполняем оба запроса параллельно для скорости
+      const [govBonds, corpBonds] = await Promise.all([
+        fetchBoard('TQOB', 'Государственные'),
+        fetchBoard('TQCB', 'Корпоративные')
+      ]);
+
+      // Склеиваем оба массива в один большой список бумаг и возвращаем
+      return [...govBonds, ...corpBonds];
+
     } catch (error) {
-      console.error('Не удалось загрузить полный список облигаций с MOEX:', error);
+      console.error('Ошибка загрузки базы облигаций:', error);
       return [];
     }
   },
 
-  /**
-   * Загрузка исторических свечей для графика (оставляем без изменений)
-   */
-  getBondHistory: async (secid) => {
+  // 2. Сбор данных для макро-индикаторов (Валюты и Золото в навбаре)
+  getTickers: async () => {
     try {
-      const response = await fetch(
-        `${MOEX_BASE_URL}/engines/stock/markets/bonds/boards/TQCB/securities/${secid}/candles.json?iss.meta=off&interval=24`
-      );
-      if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
-      const rawData = await response.json();
+      const response = await fetch(`${MOEX_BASE_URL}/statistics/engines/currency/markets/index/securities.json?iss.meta=off`);
+      const json = await response.json();
       
-      const formattedCandles = transformMoexData(rawData.candles);
+      const data = json.securities.data;
+      const columns = json.securities.columns;
+      
+      const idxSecid = columns.indexOf('SECID');
+      const idxVal = columns.indexOf('CURRENTVALUE');
+      const idxChange = columns.indexOf('CHANGE');
 
-      return formattedCandles.map(candle => ({
-        time: candle.begin.split(' ')[0],
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-      })).filter(c => c.close !== null);
+      // Возвращаем все макро-индикаторы (фильтрацию оставим на стороне интерфейса)
+      return data.map(row => ({
+        id: row[idxSecid],
+        name: row[idxSecid],
+        price: row[idxVal],
+        change: row[idxChange]
+      }));
+
     } catch (error) {
-      console.error(`Ошибка загрузки истории для ${secid}:`, error);
+      console.error('Ошибка загрузки валютных тикеров:', error);
       return [];
     }
   }

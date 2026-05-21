@@ -1,90 +1,173 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AppProvider } from './store/AppContext';
 import { moexApi } from './api/moexApi';
-import Navbar from './components/layout/Navbar';
-import Sidebar from './components/layout/Sidebar';
-import BondTable from './components/bonds/BondTable';
-import BondChart from './components/charts/BondChart'; // Импортируем наш компонент графика
+import SearchPage from './pages/SearchPage';
+import FavoritesPage from './pages/FavoritesPage';
+import DashboardPage from './pages/DashboardPage';
+import LoginPage from './components/auth/LoginPage'; 
+import './App.css'; 
 
 function App() {
-  const [bonds, setBonds] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [tickers, setTickers] = useState([]);
+  const [currentTime, setCurrentTime] = useState('');
   
-  // Новые состояния для управления графиком котировок
-  const [selectedSecid, setSelectedSecid] = useState(null);
-  const [chartData, setChartData] = useState([]);
-  const [loadingChart, setLoadingChart] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('isAuthenticated') === 'true';
+  });
 
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      const data = await moexApi.getBonds();
-      setBonds(data);
-      setLoading(false);
-    }
-    loadData();
+    moexApi.getTickers().then(setTickers);
+    const tickerInterval = setInterval(() => {
+      moexApi.getTickers().then(setTickers);
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(tickerInterval);
   }, []);
 
-  // Обработчик выбора облигации в таблице
-  const handleSelectBond = async (secid) => {
-    setSelectedSecid(secid);
-    setLoadingChart(true);
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const options = { weekday: 'long', day: 'numeric', month: 'short' };
+      const dateStr = now.toLocaleDateString('ru-RU', options);
+      const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      
+      const formattedDate = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+      setCurrentTime(`${formattedDate} ${timeStr}`);
+    };
+
+    updateClock();
+    const clockInterval = setInterval(updateClock, 60000);
+
+    return () => clearInterval(clockInterval);
+  }, []);
+
+  const sortedTickers = useMemo(() => {
+    if (!tickers.length) return [];
+    const order = ['USD/RUB', 'EUR/RUB', 'CNY/RUB', 'ЗОЛОТО'];
     
-    // Загружаем исторические свечи через наш API-курьер
-    const history = await moexApi.getBondHistory(secid);
-    setChartData(history);
-    setLoadingChart(false);
+    return [...tickers]
+      .filter(t => order.includes(t.name?.toUpperCase()))
+      .sort((a, b) => order.indexOf(a.name?.toUpperCase()) - order.indexOf(b.name?.toUpperCase()));
+  }, [tickers]);
+
+  const handleLoginSuccess = () => {
+    localStorage.setItem('isAuthenticated', 'true');
+    setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
+    setIsLoggedIn(false);
   };
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Navbar />
+    <AppProvider>
+      <div className="App" style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: 'var(--bg-main)' }}>
+        
+        <header style={{ 
+          height: '60px', 
+          backgroundColor: 'var(--bg-card)', 
+          borderBottom: '1px solid var(--border-color)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          padding: '0 20px', 
+          flexShrink: 0
+        }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '25px' }}>
+            <h5 style={{ color: '#fff', margin: 0, fontWeight: '800', letterSpacing: '0.3px', fontSize: '18px' }}>
+              Bond<span style={{ color: 'var(--accent-blue)' }}>Screener</span>
+            </h5>
+            
+            {isLoggedIn && (
+              <div className="btn-group" style={{ gap: '4px' }}>
+                <button 
+                  className={`btn btn-sm rounded ${activeTab === 'dashboard' ? 'btn-primary' : 'btn-dark text-light'}`} 
+                  style={{ fontWeight: '500', border: '1px solid var(--border-color)' }}
+                  onClick={() => setActiveTab('dashboard')}
+                >
+                  Дашборд
+                </button>
+                <button 
+                  className={`btn btn-sm rounded ${activeTab === 'search' ? 'btn-primary' : 'btn-dark text-light'}`} 
+                  style={{ fontWeight: '500', border: '1px solid var(--border-color)' }}
+                  onClick={() => setActiveTab('search')}
+                >
+                  Скринер
+                </button>
+                <button 
+                  className={`btn btn-sm rounded ${activeTab === 'favorites' ? 'btn-primary' : 'btn-dark text-light'}`} 
+                  style={{ fontWeight: '500', border: '1px solid var(--border-color)' }}
+                  onClick={() => setActiveTab('favorites')}
+                >
+                  Избранное
+                </button>
+              </div>
+            )}
+          </div>
 
-      <div className="d-flex flex-grow-1" style={{ overflow: 'hidden' }}>
-        <div style={{ width: '250px', flexShrink: 0 }}>
-          <Sidebar />
-        </div>
-
-        <div className="p-4 flex-grow-1" style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          <h4 className="mb-4">Рынок облигаций (T+)</h4>
-
-          {/* Блок отображения графика: рендерится только если бумага выбрана */}
-          {selectedSecid && (
-            <div className="mb-4">
-              {loadingChart ? (
-                <div className="p-4 text-center" style={{ background: 'var(--bg-card)', borderRadius: '8px', color: 'var(--text-muted)' }}>
-                  <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-                  <span>Получение исторических свечей для {selectedSecid}...</span>
-                </div>
-              ) : (
-                chartData.length > 0 ? (
-                  <BondChart data={chartData} secid={selectedSecid} />
-                ) : (
-                  <div className="p-4 text-center" style={{ background: 'var(--bg-card)', borderRadius: '8px', color: 'var(--accent-red)' }}>
-                    Исторические свечи для {selectedSecid} временно недоступны на данном борде.
+          {isLoggedIn && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
+              
+              <div style={{ display: 'flex', gap: '20px', fontSize: '13px', fontWeight: '600', alignItems: 'center' }}>
+                {sortedTickers.map(t => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{t.name}</span>
+                    <span style={{ color: '#fff' }}>
+                      {t.name?.toUpperCase() === 'ЗОЛОТО' ? Math.round(t.price) : Number(t.price).toFixed(2)}
+                    </span>
                   </div>
-                )
-              )}
+                ))}
+              </div>
+
+              <div style={{ height: '24px', width: '1px', backgroundColor: 'var(--border-color)' }}></div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <div style={{ textAlign: 'right', lineHeight: '1.2' }}>
+                  <div style={{ fontSize: '12px', color: '#fff', fontWeight: '700' }}>{currentTime}</div>
+                </div>
+
+                <button 
+                  onClick={handleLogout}
+                  className="btn btn-sm text-white" 
+                  style={{ 
+                    backgroundColor: '#4e555b', 
+                    fontWeight: 'bold', 
+                    padding: '6px 16px', 
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '13px',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.backgroundColor = '#343a40'}
+                  onMouseLeave={(e) => e.target.style.backgroundColor = '#4e555b'}
+                >
+                  Выйти
+                </button>
+              </div>
+
             </div>
           )}
+        </header>
 
-          {loading ? (
-            <div className="d-flex align-items-center" style={{ color: 'var(--text-muted)' }}>
-              <div className="spinner-border spinner-border-sm me-2" role="status"></div>
-              <span>Загрузка данных с MOEX ISS...</span>
+        <main style={{ flexGrow: 1, display: 'flex', overflow: 'hidden' }}>
+          {!isLoggedIn ? (
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%' }}>
+              <LoginPage onLoginSuccess={handleLoginSuccess} />
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <p style={{ color: 'var(--text-muted)' }}>
-                Доступно бумаг: <strong style={{ color: '#fff' }}>{bonds.length}</strong>. Кликните на строку для вывода интерактивного графика котировок:
-              </p>
-              
-              {/* Передаем функцию клика внутрь таблицы */}
-              <BondTable bonds={bonds.slice(0, 200)} onSelectBond={handleSelectBond} />
-            </div>
+            <>
+              {activeTab === 'dashboard' && <DashboardPage />}
+              {activeTab === 'search' && <SearchPage />}
+              {activeTab === 'favorites' && <FavoritesPage />}
+            </>
           )}
-        </div>
+        </main>
+        
       </div>
-    </div>
+    </AppProvider>
   );
 }
 
