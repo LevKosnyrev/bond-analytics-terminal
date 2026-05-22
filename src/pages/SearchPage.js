@@ -1,14 +1,17 @@
 import React, { useContext, useMemo, useState } from 'react';
 import { AppContext } from '../store/AppContext';
 
-// --- ВСПОМОГАТЕЛЬНЫЙ КОМПОНЕНТ: Кастомный мультивыбор для Сайдбара ---
+// --- ОБНОВЛЕННЫЙ КОМПОНЕНТ: Мультивыбор со скроллом и моментальным раскрытием ---
 const MultiSelectFilter = ({ label, placeholder, options, selected, onChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
 
-  const filteredOptions = options.filter(opt => 
-    opt.toLowerCase().includes(searchTerm.toLowerCase()) && !selected.includes(opt)
-  ).slice(0, 8);
+  // Фильтруем опции по введенному тексту и исключаем уже выбранные элементы
+  const filteredOptions = useMemo(() => {
+    return options.filter(opt => 
+      opt.toLowerCase().includes(searchTerm.toLowerCase()) && !selected.includes(opt)
+    );
+  }, [options, searchTerm, selected]);
 
   const handleSelect = (option) => {
     onChange([...selected, option]);
@@ -30,8 +33,15 @@ const MultiSelectFilter = ({ label, placeholder, options, selected, onChange }) 
         onBlur={() => setTimeout(() => setIsOpen(false), 200)} 
       />
       
-      {isOpen && searchTerm && filteredOptions.length > 0 && (
-        <ul className="list-group position-absolute w-100" style={{ zIndex: 1000, top: '60px', boxShadow: '0 8px 16px rgba(0,0,0,0.5)' }}>
+      {/* ИЗМЕНЕНИЕ: Список показывается сразу при фокусе, добавлен скроллбар и ограничение высоты */}
+      {isOpen && filteredOptions.length > 0 && (
+        <ul className="list-group position-absolute w-100" style={{ 
+          zIndex: 1000, 
+          top: '60px', 
+          boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
+          maxHeight: '180px',       // Ограничение по высоте
+          overflowY: 'auto'         // Включение вертикального скролла
+        }}>
           {filteredOptions.map(opt => (
             <li 
               key={opt} 
@@ -57,7 +67,6 @@ const MultiSelectFilter = ({ label, placeholder, options, selected, onChange }) 
   );
 };
 
-// === ГЛАВНЫЙ КОМПОНЕНТ СТРАНИЦЫ ===
 const SearchPage = () => {
   const { bonds, loading, favorites, toggleFavorite, filters } = useContext(AppContext);
 
@@ -87,22 +96,14 @@ const SearchPage = () => {
   return (
     <div style={{ display: 'flex', width: '100%', height: 'calc(100vh - 60px)', backgroundColor: 'var(--bg-main)', overflow: 'hidden' }}>
       
-      {/* ЛЕВАЯ ПАНЕЛЬ: САЙДБАР С ФИЛЬТРАМИ */}
       <aside style={{ 
-        width: '320px', 
-        minWidth: '320px', 
-        borderRight: '1px solid var(--border-color)', 
-        backgroundColor: 'var(--bg-card)', 
-        padding: '20px',
-        overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column'
+        width: '320px', minWidth: '320px', borderRight: '1px solid var(--border-color)', 
+        backgroundColor: 'var(--bg-card)', padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column'
       }}>
         <h6 className="mb-4 text-white d-flex align-items-center" style={{ fontWeight: 'bold' }}>
           <span className="me-2">🎛️</span> Фильтры Скринера
         </h6>
 
-        {/* Сектор */}
         <div className="mb-4">
           <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Сектор рынка</label>
           <select 
@@ -112,66 +113,29 @@ const SearchPage = () => {
             onChange={(e) => filters.setSector(e.target.value)}
           >
             <option value="Все">Все секторы</option>
-            <option value="Государственные">ОФЗ / Государственные</option>
+            <option value="Государственные">ОФЗ / Гос</option>
             <option value="Корпоративные">Корпоративные</option>
           </select>
         </div>
 
-        {/* Доходность */}
         <div className="mb-4">
           <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Доходность, %</label>
           <div className="d-flex gap-2 mt-1">
-            <input 
-              type="number" className="form-control form-control-sm bg-dark text-white shadow-none border-secondary" 
-              value={filters.yieldMin} onChange={(e) => filters.setYieldMin(e.target.value)} placeholder="От" 
-            />
-            <input 
-              type="number" className="form-control form-control-sm bg-dark text-white shadow-none border-secondary" 
-              value={filters.yieldMax} onChange={(e) => filters.setYieldMax(e.target.value)} placeholder="До" 
-            />
+            <input type="number" className="form-control form-control-sm bg-dark text-white shadow-none border-secondary" value={filters.yieldMin} onChange={(e) => filters.setYieldMin(e.target.value)} placeholder="От" />
+            <input type="number" className="form-control form-control-sm bg-dark text-white shadow-none border-secondary" value={filters.yieldMax} onChange={(e) => filters.setYieldMax(e.target.value)} placeholder="До" />
           </div>
         </div>
 
-        {/* Мультивыбор: Названия */}
-        <MultiSelectFilter 
-          label="Название бумаги" 
-          placeholder="Поиск..."
-          options={filterOptions.names}
-          selected={filters.selectedNames}
-          onChange={filters.setSelectedNames}
-        />
+        <MultiSelectFilter label="Название бумаги" placeholder="Выберите или введите..." options={filterOptions.names} selected={filters.selectedNames} onChange={filters.setSelectedNames} />
+        <MultiSelectFilter label="Код ISIN / SECID" placeholder="Выберите или введите..." options={filterOptions.isins} selected={filters.selectedISINs} onChange={filters.setSelectedISINs} />
 
-        {/* Мультивыбор: ISIN */}
-        <MultiSelectFilter 
-          label="Код ISIN / SECID" 
-          placeholder="Поиск..."
-          options={filterOptions.isins}
-          selected={filters.selectedISINs}
-          onChange={filters.setSelectedISINs}
-        />
-
-        <button 
-          className="btn btn-outline-secondary btn-sm mt-auto w-100" 
-          style={{ fontSize: '12px' }}
-          onClick={() => {
-            filters.setSector('Все');
-            filters.setSelectedNames([]);
-            filters.setSelectedISINs([]);
-            filters.setYieldMin('');
-            filters.setYieldMax('');
-          }}
-        >
-          Сбросить фильтры
-        </button>
+        <button className="btn btn-outline-secondary btn-sm mt-auto w-100" style={{ fontSize: '12px' }} onClick={() => { filters.setSector('Все'); filters.setSelectedNames([]); filters.setSelectedISINs([]); filters.setYieldMin(''); filters.setYieldMax(''); }}>Сбросить фильтры</button>
       </aside>
 
-      {/* ПРАВАЯ ПАНЕЛЬ: ТАБЛИЦА */}
       <section style={{ flexGrow: 1, padding: '20px', overflowY: 'auto' }}>
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h4 className="m-0 text-white" style={{ fontWeight: 'bold' }}>Результаты поиска</h4>
-          <span className="badge bg-dark text-muted" style={{ border: '1px solid var(--border-color)' }}>
-            Найдено: {filteredBonds.length}
-          </span>
+          <span className="badge bg-dark text-muted" style={{ border: '1px solid var(--border-color)' }}>Найдено: {filteredBonds.length}</span>
         </div>
 
         <div className="card" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
@@ -194,23 +158,20 @@ const SearchPage = () => {
                       {favorites.includes(b.SECID) ? '★' : '☆'}
                     </span>
                   </td>
-                  <td style={{ verticalAlign: 'middle', py: 2 }}>
+                  <td style={{ verticalAlign: 'middle' }}>
                     <div style={{ fontWeight: 'bold' }}>{b.SHORTNAME}</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{b.SECID}</div>
                   </td>
                   <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>{b.LAST ? `${Number(b.LAST).toFixed(2)}%` : '-'}</td>
                   <td style={{ textAlign: 'right', verticalAlign: 'middle', fontWeight: 'bold', color: 'var(--accent-green)' }}>{b.YIELD ? `${Number(b.YIELD).toFixed(2)}%` : '-'}</td>
                   <td style={{ textAlign: 'right', verticalAlign: 'middle' }}>{b.COUPONVALUE ? `${Number(b.COUPONVALUE).toFixed(2)}` : '-'}</td>
-                  <td style={{ textAlign: 'right', verticalAlign: 'middle', paddingRight: '20px', color: 'var(--text-muted)' }}>
-                    {b.VALTODAY ? new Intl.NumberFormat('ru-RU').format(Math.round(b.VALTODAY)) : '0'}
-                  </td>
+                  <td style={{ textAlign: 'right', verticalAlign: 'middle', paddingRight: '20px', color: 'var(--text-muted)' }}>{b.VALTODAY ? new Intl.NumberFormat('ru-RU').format(Math.round(b.VALTODAY)) : '0'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
-
     </div>
   );
 };
