@@ -2,6 +2,7 @@ import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../store/AppContext';
 import { moexApi } from '../api/moexApi';
 import BondChart from '../components/charts/BondChart';
+import BondAIInsights from '../components/BondAIInsights';
 
 const fmt  = (n, d = 2) => (n != null && n !== '' ? Number(n).toFixed(d) : '—');
 const fmtVol = (v) => v ? new Intl.NumberFormat('ru-RU').format(Math.round(v)) : '—';
@@ -216,6 +217,11 @@ const BondDetailPage = ({ bond, onBack }) => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ИИ-анализ надёжности и новости по эмитенту */}
+      <div style={{ marginTop: '20px' }}>
+        <BondAIInsights bond={bond} />
       </div>
     </div>
   );
