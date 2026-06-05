@@ -8,10 +8,38 @@
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 часа
 const MAX_NEWS = 6;
+const FETCH_TIMEOUT_MS = 7000; // тайм-аут на каждый сетевой запрос — чтобы не висеть на упавшем прокси
 
 // Поиск новостей по эмитенту в Google News (русскоязычная выдача).
 const googleNewsUrl = (query) =>
   `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=ru&gl=RU&ceid=RU:ru`;
+
+// fetch с тайм-аутом: если посредник не ответил за FETCH_TIMEOUT_MS — обрываем запрос.
+// Без этого зависший прокси заставлял интерфейс ждать ~20 секунд.
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Имя бумаги (SHORTNAME) содержит серийные коды («РЖД 1Р-28R»), которые засоряют
+// поиск новостей. Оставляем читаемое имя эмитента: берём ведущие слова до первого
+// токена с цифрами/кодом выпуска.
+function issuerName(bond) {
+  const raw = (bond.SHORTNAME || bond.SECID || '').trim();
+  const words = raw.split(/\s+/);
+  const clean = [];
+  for (const w of words) {
+    // токен с цифрами или дефисом в середине — это уже код выпуска, дальше не идём
+    if (/\d/.test(w) || /\w-\w/.test(w)) break;
+    clean.push(w);
+  }
+  return (clean.join(' ') || raw).trim();
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Прозрачная числовая оценка надёжности (0..100).
@@ -82,9 +110,20 @@ function fmtDate(pubDate) {
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+// Разбор RSS-XML в наш формат новостей (общий для прокси, отдающих сырой XML).
+function parseRssXml(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  return Array.from(doc.querySelectorAll('item')).slice(0, MAX_NEWS).map((item) => {
+    const get = (tag) => item.querySelector(tag)?.textContent?.trim() || '';
+    return { title: get('title'), url: get('link'), date: fmtDate(get('pubDate')), summary: '' };
+  });
+}
+
+// Путь 1: rss2json отдаёт готовый JSON. Параметр count убран — на бесплатном
+// тарифе он требует API-ключ и роняет запрос (HTTP 422); обрезаем сами через slice.
 async function fetchNewsViaRss2Json(rssUrl) {
-  const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}&count=${MAX_NEWS}`;
-  const res = await fetch(url);
+  const url = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+  const res = await fetchWithTimeout(url);
   if (!res.ok) throw new Error('rss2json HTTP ' + res.status);
   const json = await res.json();
   if (json.status !== 'ok' || !Array.isArray(json.items)) {
@@ -98,29 +137,45 @@ async function fetchNewsViaRss2Json(rssUrl) {
   }));
 }
 
-async function fetchNewsViaProxy(rssUrl) {
-  const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`);
-  if (!res.ok) throw new Error('proxy HTTP ' + res.status);
-  const xml = await res.text();
-  const doc = new DOMParser().parseFromString(xml, 'text/xml');
-  return Array.from(doc.querySelectorAll('item')).slice(0, MAX_NEWS).map((item) => {
-    const get = (tag) => item.querySelector(tag)?.textContent?.trim() || '';
-    return { title: get('title'), url: get('link'), date: fmtDate(get('pubDate')), summary: '' };
-  });
+// Путь 2: allorigins — CORS-прокси, отдаёт сырой XML ленты.
+async function fetchNewsViaAllOrigins(rssUrl) {
+  const res = await fetchWithTimeout(`https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`);
+  if (!res.ok) throw new Error('allorigins HTTP ' + res.status);
+  return parseRssXml(await res.text());
+}
+
+// Путь 3: corsproxy.io — ещё один CORS-прокси с сырым XML (резерв на случай сбоя двух выше).
+async function fetchNewsViaCorsProxy(rssUrl) {
+  const res = await fetchWithTimeout(`https://corsproxy.io/?url=${encodeURIComponent(rssUrl)}`);
+  if (!res.ok) throw new Error('corsproxy HTTP ' + res.status);
+  return parseRssXml(await res.text());
 }
 
 async function fetchNews(bond) {
-  const issuer = bond.SHORTNAME || bond.SECID;
-  const rssUrl = googleNewsUrl(`${issuer} облигации`);
+  const rssUrl = googleNewsUrl(`${issuerName(bond)} облигации`);
 
-  let items;
+  // Пробуем всех посредников параллельно и берём первого, кто вернул непустой
+  // список. Так быстрее (не ждём по очереди) и устойчивее к падению любого из них.
+  const sources = [
+    fetchNewsViaRss2Json(rssUrl),
+    fetchNewsViaAllOrigins(rssUrl),
+    fetchNewsViaCorsProxy(rssUrl),
+  ];
+
   try {
-    items = await fetchNewsViaRss2Json(rssUrl);
+    const items = await Promise.any(
+      sources.map(async (p) => {
+        const list = (await p).filter((n) => n.title && n.url);
+        if (list.length === 0) throw new Error('пустая лента');
+        return list;
+      })
+    );
+    return items;
   } catch (e) {
-    console.warn('rss2json не сработал, пробуем прокси:', e?.message);
-    items = await fetchNewsViaProxy(rssUrl);
+    // AggregateError: все источники упали или вернули пусто.
+    console.warn('Новости не загрузились ни через один источник.');
+    return [];
   }
-  return items.filter((n) => n.title && n.url);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
