@@ -67,7 +67,7 @@ const MultiSelectFilter = ({ label, placeholder, options, selected, onChange }) 
 };
 
 const FavoritesPage = () => {
-  const { bonds, favorites, toggleFavorite, loading, filters } = useContext(AppContext);
+  const { bonds, favorites, toggleFavorite, loading, filters, navigateToBond } = useContext(AppContext);
 
   const favBondsRaw = useMemo(() => {
     return bonds.filter(b => favorites.includes(b.SECID));
@@ -104,7 +104,7 @@ const FavoritesPage = () => {
         backgroundColor: 'var(--bg-card)', padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column'
       }}>
         <h6 className="mb-4 text-white d-flex align-items-center" style={{ fontWeight: 'bold' }}>
-          <span className="me-2">📁</span> Фильтры портфеля
+          Фильтры портфеля
         </h6>
 
         <div className="mb-4">
@@ -116,7 +116,7 @@ const FavoritesPage = () => {
             onChange={(e) => filters.setSector(e.target.value)}
           >
             <option value="Все">Все секторы</option>
-            <option value="Государственные">ОФЗ / Гос</option>
+            <option value="Государственные">Государственные</option>
             <option value="Корпоративные">Корпоративные</option>
           </select>
         </div>
@@ -138,7 +138,7 @@ const FavoritesPage = () => {
       <section style={{ flexGrow: 1, padding: '20px', overflowY: 'auto' }}>
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h4 className="m-0 text-white" style={{ fontWeight: 'bold' }}>Ваш инвестиционный портфель</h4>
-          <span className="badge bg-dark text-muted" style={{ border: '1px solid var(--border-color)' }}>Отображено: {filteredFavBonds.length} из {favorites.length}</span>
+          <span className="badge bg-dark text-white" style={{ border: '1px solid var(--border-color)' }}>Отображено: {filteredFavBonds.length} из {favorites.length}</span>
         </div>
 
         <div className="card" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
@@ -154,9 +154,9 @@ const FavoritesPage = () => {
             </thead>
             <tbody>
               {filteredFavBonds.map(b => (
-                <tr key={b.SECID} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <tr key={b.SECID} onClick={() => navigateToBond(b)} style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }}>
                   <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                    <span onClick={() => toggleFavorite(b.SECID)} style={{ cursor: 'pointer', color: '#e74c3c', fontSize: '16px', fontWeight: 'bold' }}>✕</span>
+                    <span onClick={e => { e.stopPropagation(); toggleFavorite(b.SECID); }} style={{ cursor: 'pointer', color: '#e74c3c', fontSize: '16px', fontWeight: 'bold' }}>✕</span>
                   </td>
                   <td style={{ verticalAlign: 'middle' }}>
                     <div style={{ fontWeight: 'bold', color: '#fff' }}>{b.SHORTNAME}</div>

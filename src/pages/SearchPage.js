@@ -68,7 +68,7 @@ const MultiSelectFilter = ({ label, placeholder, options, selected, onChange }) 
 };
 
 const SearchPage = () => {
-  const { bonds, loading, favorites, toggleFavorite, filters } = useContext(AppContext);
+  const { bonds, loading, favorites, toggleFavorite, filters, navigateToBond } = useContext(AppContext);
 
   const filterOptions = useMemo(() => {
     const names = new Set();
@@ -113,7 +113,7 @@ const SearchPage = () => {
             onChange={(e) => filters.setSector(e.target.value)}
           >
             <option value="Все">Все секторы</option>
-            <option value="Государственные">ОФЗ / Гос</option>
+            <option value="Государственные">Государственные</option>
             <option value="Корпоративные">Корпоративные</option>
           </select>
         </div>
@@ -135,7 +135,7 @@ const SearchPage = () => {
       <section style={{ flexGrow: 1, padding: '20px', overflowY: 'auto' }}>
         <div className="d-flex justify-content-between align-items-center mb-4">
           <h4 className="m-0 text-white" style={{ fontWeight: 'bold' }}>Результаты поиска</h4>
-          <span className="badge bg-dark text-muted" style={{ border: '1px solid var(--border-color)' }}>Найдено: {filteredBonds.length}</span>
+          <span className="badge bg-dark text-white" style={{ border: '1px solid var(--border-color)' }}>Найдено: {filteredBonds.length}</span>
         </div>
 
         <div className="card" style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
@@ -152,9 +152,9 @@ const SearchPage = () => {
             </thead>
             <tbody>
               {filteredBonds.map(b => (
-                <tr key={b.SECID} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <tr key={b.SECID} onClick={() => navigateToBond(b)} style={{ borderBottom: '1px solid var(--border-color)', cursor: 'pointer' }}>
                   <td style={{ textAlign: 'center', verticalAlign: 'middle' }}>
-                    <span onClick={() => toggleFavorite(b.SECID)} style={{ cursor: 'pointer', color: favorites.includes(b.SECID) ? 'var(--accent-blue)' : '#444' }}>
+                    <span onClick={e => { e.stopPropagation(); toggleFavorite(b.SECID); }} style={{ cursor: 'pointer', color: favorites.includes(b.SECID) ? 'var(--accent-blue)' : '#444' }}>
                       {favorites.includes(b.SECID) ? '★' : '☆'}
                     </span>
                   </td>

@@ -23,7 +23,7 @@ const LoginPage = ({ onLoginSuccess }) => {
       if (savedUser) {
         const parsedUser = JSON.parse(savedUser);
         if (parsedUser.password === password) {
-          onLoginSuccess(); // Пароль совпал, пускаем в терминал!
+          onLoginSuccess(username);
         } else {
           setError('Неверный пароль');
         }
@@ -50,7 +50,7 @@ const LoginPage = ({ onLoginSuccess }) => {
       <div style={{ width: '100%', maxWidth: '400px', padding: '40px', backgroundColor: 'var(--bg-card)', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)' }}>
         
         <h2 className="text-center mb-1" style={{ color: 'var(--accent-green)', fontWeight: 'bold' }}>
-          Bond Terminal
+          Bond Screener
         </h2>
         <p className="text-center mb-4" style={{ color: 'var(--text-muted)' }}>
           {isLoginMode ? 'Авторизация в системе' : 'Создание нового аккаунта'}

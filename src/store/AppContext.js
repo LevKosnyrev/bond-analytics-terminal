@@ -8,10 +8,12 @@ export const AppProvider = ({ children }) => {
   const [bonds, setBonds] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // НОВЫЕ СОСТОЯНИЯ ФИЛЬТРОВ
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedBond, setSelectedBond] = useState(null);
+
   const [sector, setSector] = useState('Все');
-  const [selectedNames, setSelectedNames] = useState([]); // Массив для названий
-  const [selectedISINs, setSelectedISINs] = useState([]); // Массив для ISIN/SECID
+  const [selectedNames, setSelectedNames] = useState([]);
+  const [selectedISINs, setSelectedISINs] = useState([]);
   const [yieldMin, setYieldMin] = useState('');
   const [yieldMax, setYieldMax] = useState('');
 
@@ -30,21 +32,29 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const toggleFavorite = (secid) => {
-    setFavorites(prev => prev.includes(secid) ? prev.filter(id => id !== secid) : [...prev, secid]);
+    setFavorites(prev =>
+      prev.includes(secid) ? prev.filter(id => id !== secid) : [...prev, secid]
+    );
+  };
+
+  const navigateToBond = (bond) => {
+    setSelectedBond(bond);
+    setActiveTab('bondDetail');
   };
 
   return (
-    <AppContext.Provider value={{ 
-      favorites, toggleFavorite, 
+    <AppContext.Provider value={{
+      favorites, toggleFavorite,
       bonds, loading,
-      // Передаем новые фильтры
-      filters: { 
-        sector, setSector, 
-        selectedNames, setSelectedNames, 
-        selectedISINs, setSelectedISINs, 
-        yieldMin, setYieldMin, 
-        yieldMax, setYieldMax 
-      }
+      activeTab, setActiveTab,
+      selectedBond, navigateToBond,
+      filters: {
+        sector, setSector,
+        selectedNames, setSelectedNames,
+        selectedISINs, setSelectedISINs,
+        yieldMin, setYieldMin,
+        yieldMax, setYieldMax,
+      },
     }}>
       {children}
     </AppContext.Provider>
