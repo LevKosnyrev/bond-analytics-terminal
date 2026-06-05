@@ -33,8 +33,12 @@ export const moexApi = {
           LISTLEVEL:    row[secCols.indexOf('LISTLEVEL')],
           SECTOR:       sectorName,
 
+          // PREVWAPRICE (средневзвешенная цена предыдущего дня) лежит в блоке
+          // securities, а не marketdata — берём её отсюда, иначе дневное
+          // изменение цены не считается.
+          PREVWAPRICE:  row[secCols.indexOf('PREVWAPRICE')],
+
           LAST:         mdRow[mdCols.indexOf('LAST')],
-          PREVWAPRICE:  mdRow[mdCols.indexOf('PREVWAPRICE')],
           YIELD:        mdRow[mdCols.indexOf('YIELD')],
           VALTODAY:     mdRow[mdCols.indexOf('VALTODAY')],
           DURATION:     mdRow[mdCols.indexOf('DURATION')],
