@@ -3,11 +3,6 @@ import { AppContext } from '../store/AppContext';
 
 const fmt    = (n, d = 2) => (n != null ? Number(n).toFixed(d) : '—');
 const fmtVol = (v) => v ? new Intl.NumberFormat('ru-RU').format(Math.round(v)) : '—';
-const fmtDate = (s) => {
-  if (!s || s === '0000-00-00') return '—';
-  const [y, m, d] = s.split('-');
-  return `${d}.${m}.${y}`;
-};
 
 // ── Карточка облигации на карте рынка ──────────────────────────────────────
 const BondCard = ({ bond, onClick }) => {
@@ -209,7 +204,7 @@ const RadarTable = ({ title, data, valueLabel, getValue, onRowClick }) => (
 
 // ── Главный компонент ──────────────────────────────────────────────────────
 const DashboardPage = () => {
-  const { bonds, loading, navigateToBond } = useContext(AppContext);
+  const { bonds, loading, error, navigateToBond } = useContext(AppContext);
 
   const radars = useMemo(() => {
     if (!bonds.length) return { topLiquid: [], topYield: [], cashParking: [] };
@@ -236,6 +231,12 @@ const DashboardPage = () => {
   if (loading) return (
     <div className="p-5 text-center text-white" style={{ width: '100%' }}>
       Загрузка аналитики рынка...
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-5 text-center" style={{ width: '100%', color: 'var(--accent-red)' }}>
+      {error}
     </div>
   );
 

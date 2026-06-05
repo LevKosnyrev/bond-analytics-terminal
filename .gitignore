@@ -13,6 +13,9 @@
 
 # misc
 .DS_Store
+
+# Локальная конфигурация Firebase — не храним ключи в репозитории
+.env
 .env.local
 .env.development.local
 .env.test.local

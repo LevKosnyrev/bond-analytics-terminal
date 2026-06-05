@@ -1,5 +1,7 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../store/AppContext';
+import { moexApi } from '../api/moexApi';
+import BondChart from '../components/charts/BondChart';
 
 const fmt  = (n, d = 2) => (n != null && n !== '' ? Number(n).toFixed(d) : '—');
 const fmtVol = (v) => v ? new Intl.NumberFormat('ru-RU').format(Math.round(v)) : '—';
@@ -59,6 +61,21 @@ const InfoBlock = ({ title, rows }) => (
 
 const BondDetailPage = ({ bond, onBack }) => {
   const { toggleFavorite, favorites } = useContext(AppContext);
+  const [candles, setCandles] = useState([]);
+  const [chartLoading, setChartLoading] = useState(true);
+
+  useEffect(() => {
+    if (!bond?.SECID) return;
+    let active = true;
+    setChartLoading(true);
+    moexApi.getCandles(bond.SECID).then(data => {
+      if (active) {
+        setCandles(data);
+        setChartLoading(false);
+      }
+    });
+    return () => { active = false; };
+  }, [bond?.SECID]);
 
   if (!bond) return (
     <div style={{ padding: '40px', color: 'var(--text-muted)', textAlign: 'center', width: '100%' }}>
@@ -165,6 +182,40 @@ const BondDetailPage = ({ bond, onBack }) => {
           ['Сектор',          bond.SECTOR || '—'],
         ]} />
 
+      </div>
+
+      {/* График котировок */}
+      <div style={{
+        marginTop: '20px',
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '8px',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--border-color)',
+          fontSize: '12px',
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          fontWeight: '600',
+        }}>
+          График котировок · цена в % от номинала · за последний год
+        </div>
+        <div style={{ height: '360px', padding: '12px' }}>
+          {chartLoading ? (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
+              Загрузка графика...
+            </div>
+          ) : candles.length > 0 ? (
+            <BondChart data={candles} />
+          ) : (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
+              Недостаточно данных для построения графика
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,39 +1,56 @@
-// Имитация задержки сети (500 мс)
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+import { auth } from '../firebase';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+
+// Firebase Auth работает с email, а в интерфейсе пользователь вводит логин.
+// Поэтому логин превращаем в синтетический email вида login@bond.local —
+// так сохраняем привычный UX (поле «Логин»), но используем штатную авторизацию Firebase.
+const toEmail = (login) => `${login.trim().toLowerCase()}@bond.local`;
+
+// Преобразуем технические коды ошибок Firebase в понятные пользователю сообщения
+const friendlyError = (code) => {
+  switch (code) {
+    case 'auth/email-already-in-use':
+      return 'Пользователь с таким логином уже существует';
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Неверный логин или пароль';
+    case 'auth/weak-password':
+      return 'Пароль слишком короткий (минимум 6 символов)';
+    case 'auth/invalid-email':
+      return 'Недопустимый логин (используйте латиницу и цифры)';
+    case 'auth/network-request-failed':
+      return 'Нет связи с сервером. Проверьте интернет';
+    default:
+      return 'Ошибка сервиса авторизации. Попробуйте позже';
+  }
+};
 
 export const authApi = {
-  // РЕГИСТРАЦИЯ
-  register: async (username, password) => {
-    await delay(500); // Ждем полсекунды для реалистичности
-    
-    // Достаем список пользователей из памяти (или создаем пустой массив)
-    const users = JSON.parse(localStorage.getItem('db_users') || '[]');
-    
-    if (users.find(u => u.username === username)) {
-      throw new Error('Пользователь с таким логином уже существует');
+  // РЕГИСТРАЦИЯ — после создания пользователь автоматически входит в систему
+  register: async (login, password) => {
+    try {
+      await createUserWithEmailAndPassword(auth, toEmail(login), password);
+      return { success: true };
+    } catch (error) {
+      throw new Error(friendlyError(error.code));
     }
-
-    // Сохраняем нового пользователя
-    users.push({ username, password });
-    localStorage.setItem('db_users', JSON.stringify(users));
-    
-    return { success: true };
   },
 
   // ВХОД
-  login: async (username, password) => {
-    await delay(500);
-    
-    const users = JSON.parse(localStorage.getItem('db_users') || '[]');
-    const user = users.find(u => u.username === username && u.password === password);
-    
-    if (!user) {
-      throw new Error('Неверный логин или пароль');
+  login: async (login, password) => {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, toEmail(login), password);
+      return { uid: cred.user.uid, username: login };
+    } catch (error) {
+      throw new Error(friendlyError(error.code));
     }
+  },
 
-    // Генерируем "токен" (в реальности это сложный шифр, у нас просто случайная строка)
-    const fakeToken = `token_${Math.random().toString(36).substring(2)}_${Date.now()}`;
-    
-    return { token: fakeToken, username: user.username };
-  }
+  // ВЫХОД
+  logout: () => signOut(auth),
 };

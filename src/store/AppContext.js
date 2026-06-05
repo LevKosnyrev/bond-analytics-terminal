@@ -1,12 +1,17 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { moexApi } from '../api/moexApi';
+import { db } from '../firebase';
+import { AuthContext } from './AuthContext';
 
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  const [favorites, setFavorites] = useState(() => JSON.parse(localStorage.getItem('favBonds')) || []);
+  const { uid } = useContext(AuthContext);
+  const [favorites, setFavorites] = useState([]);
   const [bonds, setBonds] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedBond, setSelectedBond] = useState(null);
@@ -17,24 +22,50 @@ export const AppProvider = ({ children }) => {
   const [yieldMin, setYieldMin] = useState('');
   const [yieldMax, setYieldMax] = useState('');
 
+  // Загружаем избранное пользователя из Firestore при входе.
+  // При выходе (uid === null) список очищается.
   useEffect(() => {
-    localStorage.setItem('favBonds', JSON.stringify(favorites));
-  }, [favorites]);
+    if (!uid) {
+      setFavorites([]);
+      return;
+    }
+    let active = true;
+    getDoc(doc(db, 'favorites', uid))
+      .then(snap => {
+        if (active) setFavorites(snap.exists() ? (snap.data().bonds || []) : []);
+      })
+      .catch(e => console.error('Ошибка загрузки избранного:', e));
+    return () => { active = false; };
+  }, [uid]);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
-      const data = await moexApi.getBonds();
-      setBonds(data);
-      setLoading(false);
+      setError(null);
+      try {
+        const data = await moexApi.getBonds();
+        setBonds(data);
+      } catch (e) {
+        console.error('Ошибка загрузки базы облигаций:', e);
+        setError('Не удалось загрузить данные облигаций. Проверьте подключение к интернету.');
+      } finally {
+        setLoading(false);
+      }
     }
     loadData();
   }, []);
 
   const toggleFavorite = (secid) => {
-    setFavorites(prev =>
-      prev.includes(secid) ? prev.filter(id => id !== secid) : [...prev, secid]
-    );
+    if (!uid) return; // без авторизации избранное недоступно
+    setFavorites(prev => {
+      const next = prev.includes(secid)
+        ? prev.filter(id => id !== secid)
+        : [...prev, secid];
+      // Сохраняем обновлённый список в Firestore (документ на пользователя)
+      setDoc(doc(db, 'favorites', uid), { bonds: next })
+        .catch(e => console.error('Ошибка сохранения избранного:', e));
+      return next;
+    });
   };
 
   const navigateToBond = (bond) => {
@@ -45,7 +76,7 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{
       favorites, toggleFavorite,
-      bonds, loading,
+      bonds, loading, error,
       activeTab, setActiveTab,
       selectedBond, navigateToBond,
       filters: {

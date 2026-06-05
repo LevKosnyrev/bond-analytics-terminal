@@ -1,73 +1,10 @@
 import React, { useContext, useMemo, useState } from 'react';
 import { AppContext } from '../store/AppContext';
-
-// --- ОБНОВЛЕННЫЙ КОМПОНЕНТ: Мультивыбор со скроллом и моментальным раскрытием ---
-const MultiSelectFilter = ({ label, placeholder, options, selected, onChange }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-
-  const filteredOptions = useMemo(() => {
-    return options.filter(opt => 
-      opt.toLowerCase().includes(searchTerm.toLowerCase()) && !selected.includes(opt)
-    );
-  }, [options, searchTerm, selected]);
-
-  const handleSelect = (option) => {
-    onChange([...selected, option]);
-    setSearchTerm('');
-    setIsOpen(false);
-  };
-
-  return (
-    <div className="mb-4" style={{ position: 'relative' }}>
-      <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</label>
-      <input 
-        type="text" 
-        className="form-control form-control-sm shadow-none mt-1" 
-        style={{ backgroundColor: 'var(--bg-main)', color: '#fff', borderColor: 'var(--border-color)', fontSize: '13px' }} 
-        placeholder={placeholder}
-        value={searchTerm}
-        onChange={(e) => { setSearchTerm(e.target.value); setIsOpen(true); }}
-        onFocus={() => setIsOpen(true)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)} 
-      />
-      
-      {/* ИЗМЕНЕНИЕ: Список показывается сразу при фокусе, добавлен скроллбар и ограничение высоты */}
-      {isOpen && filteredOptions.length > 0 && (
-        <ul className="list-group position-absolute w-100" style={{ 
-          zIndex: 1000, 
-          top: '60px', 
-          boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
-          maxHeight: '180px',       // Ограничение по высоте
-          overflowY: 'auto'         // Включение вертикального скролла
-        }}>
-          {filteredOptions.map(opt => (
-            <li 
-              key={opt} 
-              className="list-group-item list-group-item-action py-2" 
-              style={{ backgroundColor: 'var(--bg-card)', color: '#fff', borderColor: 'var(--border-color)', cursor: 'pointer', fontSize: '12px' }}
-              onClick={() => handleSelect(opt)}
-            >
-              {opt}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-2 d-flex flex-wrap gap-1">
-        {selected.map(item => (
-          <span key={item} className="badge d-flex align-items-center" style={{ backgroundColor: 'var(--accent-blue)', fontSize: '10px', padding: '4px 8px' }}>
-            {item}
-            <span style={{ marginLeft: '6px', cursor: 'pointer' }} onClick={() => onChange(selected.filter(i => i !== item))}>×</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-};
+import MultiSelectFilter from '../components/common/MultiSelectFilter';
 
 const FavoritesPage = () => {
-  const { bonds, favorites, toggleFavorite, loading, filters, navigateToBond } = useContext(AppContext);
+  const { bonds, favorites, toggleFavorite, loading, error, filters, navigateToBond } = useContext(AppContext);
+  const [query, setQuery] = useState('');
 
   const favBondsRaw = useMemo(() => {
     return bonds.filter(b => favorites.includes(b.SECID));
@@ -84,17 +21,23 @@ const FavoritesPage = () => {
   }, [favBondsRaw]);
 
   const filteredFavBonds = useMemo(() => {
+    const q = query.trim().toLowerCase();
     return favBondsRaw.filter(b => {
+      const matchQuery = q === '' ||
+        (b.SHORTNAME && b.SHORTNAME.toLowerCase().includes(q)) ||
+        (b.SECID && b.SECID.toLowerCase().includes(q)) ||
+        (b.ISIN && b.ISIN.toLowerCase().includes(q));
       const matchSector = filters.sector === 'Все' || b.SECTOR === filters.sector;
       const matchNames = filters.selectedNames.length === 0 || filters.selectedNames.includes(b.SHORTNAME);
       const matchISIN = filters.selectedISINs.length === 0 || filters.selectedISINs.includes(b.SECID) || (b.ISIN && filters.selectedISINs.includes(b.ISIN));
       const matchYieldMin = filters.yieldMin === '' || (b.YIELD && b.YIELD >= parseFloat(filters.yieldMin));
       const matchYieldMax = filters.yieldMax === '' || (b.YIELD && b.YIELD <= parseFloat(filters.yieldMax));
-      return matchSector && matchNames && matchISIN && matchYieldMin && matchYieldMax;
+      return matchQuery && matchSector && matchNames && matchISIN && matchYieldMin && matchYieldMax;
     });
-  }, [favBondsRaw, filters]);
+  }, [favBondsRaw, filters, query]);
 
   if (loading) return <div className="p-5 text-center text-white">Загрузка портфеля...</div>;
+  if (error) return <div className="p-5 text-center" style={{ color: 'var(--accent-red)', width: '100%' }}>{error}</div>;
 
   return (
     <div style={{ display: 'flex', width: '100%', height: 'calc(100vh - 60px)', backgroundColor: 'var(--bg-main)', overflow: 'hidden' }}>
@@ -106,6 +49,18 @@ const FavoritesPage = () => {
         <h6 className="mb-4 text-white d-flex align-items-center" style={{ fontWeight: 'bold' }}>
           Фильтры портфеля
         </h6>
+
+        <div className="mb-4">
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Поиск</label>
+          <input
+            type="text"
+            className="form-control form-control-sm shadow-none mt-1"
+            style={{ backgroundColor: 'var(--bg-main)', color: '#fff', borderColor: 'var(--border-color)', fontSize: '13px' }}
+            placeholder="Название, ISIN или SECID..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
 
         <div className="mb-4">
           <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Сектор рынка</label>
@@ -122,17 +77,17 @@ const FavoritesPage = () => {
         </div>
 
         <div className="mb-4">
-          <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Доходность к пог., %</label>
+          <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Доходность, %</label>
           <div className="d-flex gap-2 mt-1">
             <input type="number" className="form-control form-control-sm bg-dark text-white shadow-none border-secondary" value={filters.yieldMin} onChange={(e) => filters.setYieldMin(e.target.value)} placeholder="От" />
             <input type="number" className="form-control form-control-sm bg-dark text-white shadow-none border-secondary" value={filters.yieldMax} onChange={(e) => filters.setYieldMax(e.target.value)} placeholder="До" />
           </div>
         </div>
 
-        <MultiSelectFilter label="Название эмитента" placeholder="Поиск в портфеле..." options={filterOptions.names} selected={filters.selectedNames} onChange={filters.setSelectedNames} />
-        <MultiSelectFilter label="Код бумаги (SECID)" placeholder="Поиск по коду..." options={filterOptions.isins} selected={filters.selectedISINs} onChange={filters.setSelectedISINs} />
+        <MultiSelectFilter label="Название бумаги" placeholder="Выберите или введите..." options={filterOptions.names} selected={filters.selectedNames} onChange={filters.setSelectedNames} />
+        <MultiSelectFilter label="Код ISIN / SECID" placeholder="Выберите или введите..." options={filterOptions.isins} selected={filters.selectedISINs} onChange={filters.setSelectedISINs} />
 
-        <button className="btn btn-outline-secondary btn-sm mt-auto w-100" style={{ fontSize: '12px' }} onClick={() => { filters.setSector('Все'); filters.setSelectedNames([]); filters.setSelectedISINs([]); filters.setYieldMin(''); filters.setYieldMax(''); }}>Сбросить фильтры</button>
+        <button className="btn btn-outline-secondary btn-sm mt-auto w-100" style={{ fontSize: '12px' }} onClick={() => { setQuery(''); filters.setSector('Все'); filters.setSelectedNames([]); filters.setSelectedISINs([]); filters.setYieldMin(''); filters.setYieldMax(''); }}>Сбросить фильтры</button>
       </aside>
 
       <section style={{ flexGrow: 1, padding: '20px', overflowY: 'auto' }}>

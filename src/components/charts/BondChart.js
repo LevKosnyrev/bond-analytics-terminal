@@ -1,15 +1,15 @@
 import React, { useEffect, useRef } from 'react';
-// 1. ИЗМЕНЕНИЕ: Добавляем импорт CandlestickSeries
 import { createChart, CandlestickSeries } from 'lightweight-charts';
 
-const BondChart = ({ data, secid }) => {
-  const chartContainerRef = useRef(null);
-  const chartRef = useRef(null);
+// Свечной график котировок облигации.
+// data: массив { time: 'YYYY-MM-DD', open, high, low, close }
+const BondChart = ({ data }) => {
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!containerRef.current) return;
 
-    const chart = createChart(chartContainerRef.current, {
+    const chart = createChart(containerRef.current, {
       layout: {
         background: { type: 'solid', color: 'transparent' },
         textColor: '#d1d4dc',
@@ -18,13 +18,13 @@ const BondChart = ({ data, secid }) => {
         vertLines: { color: 'rgba(42, 46, 57, 0.2)' },
         horzLines: { color: 'rgba(42, 46, 57, 0.2)' },
       },
-      autoSize: false, 
+      rightPriceScale: { borderColor: 'rgba(42, 46, 57, 0.4)' },
+      timeScale: { borderColor: 'rgba(42, 46, 57, 0.4)' },
+      autoSize: false,
     });
 
-    chartRef.current = chart;
-
-    // 2. ИЗМЕНЕНИЕ: Используем новый API (версия 5+) для создания серии
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+    // API lightweight-charts v5: серия создаётся через addSeries(CandlestickSeries, ...)
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#26a69a',
       downColor: '#ef5350',
       borderVisible: false,
@@ -33,43 +33,32 @@ const BondChart = ({ data, secid }) => {
     });
 
     if (data && data.length > 0) {
-      candlestickSeries.setData(data);
-      chart.timeScale().fitContent(); 
+      candleSeries.setData(data);
+      chart.timeScale().fitContent();
     }
 
-    // ResizeObserver для идеального встраивания во Flexbox
     const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
+      if (containerRef.current) {
+        chart.applyOptions({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
         });
       }
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(chartContainerRef.current);
-
+    resizeObserver.observe(containerRef.current);
     handleResize();
 
     return () => {
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [data, secid]);
+  }, [data]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <div 
-        ref={chartContainerRef} 
-        style={{ 
-          position: 'absolute', 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0 
-        }} 
-      />
+      <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
     </div>
   );
 };

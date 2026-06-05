@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useContext } from 'react';
-import { AppProvider, AppContext } from './store/AppContext';
+import { AppContext } from './store/AppContext';
+import { AuthContext } from './store/AuthContext';
 import { moexApi } from './api/moexApi';
 import SearchPage from './pages/SearchPage';
 import FavoritesPage from './pages/FavoritesPage';
@@ -8,18 +9,29 @@ import BondDetailPage from './pages/BondDetailPage';
 import LoginPage from './components/auth/LoginPage';
 import './App.css';
 
-function AppContent({ isLoggedIn, username, sortedTickers, onLoginSuccess, onLogout }) {
+function AppContent({ sortedTickers }) {
   const { activeTab, setActiveTab, selectedBond } = useContext(AppContext);
+  const { isAuthenticated, username, logout, authReady } = useContext(AuthContext);
 
   const handleLogout = () => {
     setActiveTab('dashboard');
-    onLogout();
+    logout();
   };
+
+  // Пока Firebase восстанавливает сессию — показываем заставку,
+  // чтобы не мигала форма входа у уже авторизованного пользователя.
+  if (!authReady) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-main)', color: 'var(--text-muted)' }}>
+        Загрузка...
+      </div>
+    );
+  }
 
   return (
     <div className="App" style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: 'var(--bg-main)' }}>
 
-      {isLoggedIn && (
+      {isAuthenticated && (
         <header style={{
           height: '60px',
           backgroundColor: 'var(--bg-card)',
@@ -91,9 +103,9 @@ function AppContent({ isLoggedIn, username, sortedTickers, onLoginSuccess, onLog
       )}
 
       <main style={{ flexGrow: 1, display: 'flex', overflow: 'hidden' }}>
-        {!isLoggedIn ? (
+        {!isAuthenticated ? (
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%' }}>
-            <LoginPage onLoginSuccess={onLoginSuccess} />
+            <LoginPage />
           </div>
         ) : (
           <>
@@ -114,9 +126,7 @@ function AppContent({ isLoggedIn, username, sortedTickers, onLoginSuccess, onLog
 }
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('isAuthenticated') === 'true');
-  const [username, setUsername]     = useState(() => localStorage.getItem('app_username') || '');
-  const [tickers, setTickers]       = useState([]);
+  const [tickers, setTickers] = useState([]);
 
   useEffect(() => {
     moexApi.getTickers().then(setTickers);
@@ -132,31 +142,7 @@ function App() {
       .sort((a, b) => order.indexOf(a.name?.toUpperCase()) - order.indexOf(b.name?.toUpperCase()));
   }, [tickers]);
 
-  const handleLoginSuccess = (user) => {
-    localStorage.setItem('isAuthenticated', 'true');
-    localStorage.setItem('app_username', user);
-    setIsLoggedIn(true);
-    setUsername(user);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('app_username');
-    setIsLoggedIn(false);
-    setUsername('');
-  };
-
-  return (
-    <AppProvider>
-      <AppContent
-        isLoggedIn={isLoggedIn}
-        username={username}
-        sortedTickers={sortedTickers}
-        onLoginSuccess={handleLoginSuccess}
-        onLogout={handleLogout}
-      />
-    </AppProvider>
-  );
+  return <AppContent sortedTickers={sortedTickers} />;
 }
 
 export default App;
